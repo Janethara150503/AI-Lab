@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Racha — construye tus hábitos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- Notificaciones flash -->
+  <div class="toast-stack" id="toast-stack">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="toast toast--{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
+
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="topbar__brand">
+        <span class="topbar__mark">🔥</span>
+        <div>
+          <h1 class="topbar__title">Racha</h1>
+          <p class="topbar__subtitle">No rompas la cadena.</p>
+        </div>
+      </div>
+      <div class="topbar__actions">
+        {% if habitos %}
+          <button class="btn btn--ghost" id="open-suggest-btn" type="button">✨ Sugerir hábitos</button>
+        {% endif %}
+        <button class="btn btn--primary" id="open-modal-btn" type="button">+ Nuevo hábito</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    {% if habitos %}
+      <div class="grid">
+        {% for habito in habitos %}
+          <article class="card {% if habito.cumplido_hoy %}card--done{% endif %}">
+            <div class="card__top">
+              <div>
+                <h2 class="card__name">{{ habito.nombre }}</h2>
+                {% if habito.descripcion %}
+                  <p class="card__desc">{{ habito.descripcion }}</p>
+                {% endif %}
+              </div>
+
+              <div class="streak {% if habito.racha == 0 %}streak--zero{% endif %}">
+                <span class="streak__flame">🔥</span>
+                <span class="streak__number">{{ habito.racha }}</span>
+                <span class="streak__label">
+                  {% if habito.racha == 0 %}
+                    empieza hoy
+                  {% elif habito.racha == 1 %}
+                    día
+                  {% else %}
+                    días
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+
+            <div class="history" aria-label="Últimos 7 días">
+              {% for dia in habito.historial %}
+                <div class="history__day">
+                  <span class="history__cell {% if dia.cumplido %}history__cell--filled{% endif %}"
+                        title="{{ dia.fecha }}"></span>
+                  <span class="history__label">{{ dia.fecha.strftime('%d') }}</span>
+                </div>
+              {% endfor %}
+            </div>
+
+            <div class="card__actions">
+              <form action="{{ url_for('cumplir_habito', habito_id=habito.id) }}" method="POST" class="card__form">
+                {% if habito.cumplido_hoy %}
+                  <button class="btn btn--done" type="submit" disabled>✓ Completado hoy</button>
+                {% else %}
+                  <button class="btn btn--complete" type="submit">✓ Cumplir hoy</button>
+                {% endif %}
+              </form>
+
+              <button class="btn btn--ghost btn--delete-trigger" type="button"
+                      data-habito-id="{{ habito.id }}"
+                      data-habito-nombre="{{ habito.nombre }}">
+                Eliminar
+              </button>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <span class="empty-state__flame">🔥</span>
+        <h2>Todavía no tienes hábitos</h2>
+        <p>Crea tu primer hábito y comienza a construir una rutina.</p>
+        <button class="btn btn--primary" type="button" id="open-modal-btn-empty">+ Crear hábito</button>
+      </div>
+    {% endif %}
+  </main>
+
+  <!-- Modal: nuevo hábito -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 id="modal-title">Nuevo hábito</h2>
+      <form action="{{ url_for('nuevo_habito') }}" method="POST" id="nuevo-habito-form">
+        <label class="field">
+          <span class="field__label">Nombre</span>
+          <input type="text" name="nombre" placeholder="Ej. Leer 20 minutos" required maxlength="120">
+        </label>
+        <label class="field">
+          <span class="field__label">Descripción <span class="field__optional">(opcional)</span></span>
+          <textarea name="descripcion" placeholder="Ej. Antes de dormir" maxlength="300" rows="3"></textarea>
+        </label>
+        <div class="modal__actions">
+          <button type="button" class="btn btn--ghost" id="cancel-modal-btn">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar hábito</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: confirmar eliminación -->
+  <div class="modal-overlay" id="delete-modal-overlay">
+    <div class="modal modal--small" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+      <h2 id="delete-modal-title">Eliminar hábito</h2>
+      <p class="modal__text">
+        ¿Seguro que quieres eliminar <strong id="delete-habito-nombre"></strong>?
+        Se borrará también todo su historial. Esta acción no se puede deshacer.
+      </p>
+      <form id="delete-habito-form" method="POST">
+        <div class="modal__actions">
+          <button type="button" class="btn btn--ghost" id="cancel-delete-btn">Cancelar</button>
+          <button type="submit" class="btn btn--danger">Sí, eliminar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: sugerencias de IA -->
+  <div class="modal-overlay" id="suggest-modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="suggest-modal-title">
+      <h2 id="suggest-modal-title">✨ Hábitos sugeridos</h2>
+      <p class="modal__text" id="suggest-status" aria-live="polite"></p>
+      <div id="suggest-list" class="suggest-list"></div>
+      <div class="modal__actions">
+        <button type="button" class="btn btn--ghost" id="suggest-retry-btn">Otras ideas</button>
+        <button type="button" class="btn btn--ghost" id="suggest-close-btn">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
